@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Convergent nozzle: back pressure and choking</title>
+<style>
+:root{--bg:#f7f8fa;--card:#eceff3;--text:#14181f;--muted:#5a6270;--line:#c4cad3;--blue:#185FA5;--flow:#378ADD;--coral:#D85A30;
+--acc-bg:#E6F1FB;--acc-fg:#0C447C;--warn-bg:#FAEEDA;--warn-fg:#633806;--dang-bg:#FCEBEB;--dang-fg:#791F1F;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12151a;--card:#1d222a;--text:#e8ebf0;--muted:#9aa3b0;--line:#3a414c;--blue:#85B7EB;--flow:#378ADD;--coral:#F0997B;
+--acc-bg:#0C447C;--acc-fg:#B5D4F4;--warn-bg:#633806;--warn-fg:#FAC775;--dang-bg:#791F1F;--dang-fg:#F7C1C1;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif}
+main{max-width:640px;margin:0 auto;padding:calc(1.5rem + env(safe-area-inset-top,0px)) 1rem calc(2rem + env(safe-area-inset-bottom,0px))}
+h1{font-size:1.4rem;font-weight:500;margin:0 0 .25rem}
+.lede{color:var(--muted);margin:0 0 1.5rem;line-height:1.6}
+.row{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+input[type=range]{flex:1;accent-color:var(--blue)}
+.pb{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+button{font:inherit;font-size:13px;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}
+button:hover{background:var(--card)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#reg{font-size:14px;padding:8px 12px;border-radius:8px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px}
+.mc{background:var(--card);border-radius:8px;padding:10px 12px}
+.ml{font-size:12px;color:var(--muted);margin:0}.mv{font-size:20px;font-weight:500;margin:2px 0 0}
+canvas{display:block;width:100%}
+.cap{font-size:12px;color:var(--muted);margin:4px 0 16px}
+footer{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+<h1>Convergent nozzle: back pressure and choking</h1>
+<p class="lede">Lower the back pressure and watch the exit pressure, exit Mach number and mass flow respond, until the exit reaches M = 1 and the nozzle chokes. Air, γ = 1.4, isentropic flow inside the nozzle.</p>
+<div class="row">
+<label for="pb" style="font-size:14px;color:var(--muted)">p<sub>B</sub>/p<sub>0</sub></label>
+<input type="range" id="pb" min="0.05" max="1" step="0.005" value="0.8">
+<span id="pbv" style="font-size:14px;font-weight:500;min-width:44px;text-align:right">0.800</span>
+</div>
+<div class="pb">
+<button data-v="1">Case 1: p<sub>B</sub> = p<sub>0</sub></button>
+<button data-v="0.75">Case 2: subsonic</button>
+<button data-v="0.5283">Case 3: just choked</button>
+<button data-v="0.3">Case 4: below critical</button>
+</div>
+<div id="reg"></div>
+<div class="grid">
+<div class="mc"><p class="ml">Exit Mach</p><p class="mv" id="me">0</p></div>
+<div class="mc"><p class="ml">p<sub>E</sub>/p<sub>0</sub></p><p class="mv" id="pe">0</p></div>
+<div class="mc"><p class="ml">Mass flow fn</p><p class="mv" id="mf">0</p></div>
+</div>
+<canvas id="c1" style="height:140px"></canvas>
+<p class="cap">Shading shows local Mach number. Coral pulses are pressure signals travelling upstream at a − u.</p>
+<canvas id="c2" style="height:200px"></canvas>
+<p class="cap">Static pressure along the nozzle (x = 1 is the exit) and in the back chamber.</p>
+<canvas id="c3" style="height:190px"></canvas>
+<p class="cap">Mass flow function ṁ√(c<sub>p</sub>T<sub>0</sub>)/(A<sub>E</sub>p<sub>0</sub>) against back pressure. The dot is the current operating point.</p>
+<footer>Model: area ratio A/A<sub>E</sub> = 1 + 2(1 − x)², mass flow function f(M) = γ/√(γ−1) · M(1 + (γ−1)M²/2)<sup>−(γ+1)/(2(γ−1))</sup>, critical ratio p*/p<sub>0</sub> = 0.528. Built for Cambridge Engineering IIA 3A3 revision.</footer>
+</main>
+<script>
+const g=1.4,rc=Math.pow(1.2,-3.5);
+const F=M=>g/Math.sqrt(g-1)*M*Math.pow(1+0.2*M*M,-3);
+const Fmax=F(1);
+const prM=M=>Math.pow(1+0.2*M*M,-3.5);
+const Mp=r=>r>=1?0:Math.sqrt(5*(Math.pow(r,-1/3.5)-1));
+const A=x=>1+2*Math.pow(1-x,2);
+function Mx(x,Fe){const t=Fe/A(x);if(t>=Fmax-1e-9)return 1;let lo=0,hi=1;for(let i=0;i<40;i++){const m=(lo+hi)/2;if(F(m)<t)lo=m;else hi=m;}return (lo+hi)/2;}
+let r=0.8,prof=[],Me=0,Fe=0,pE=1,waves=[],last=performance.now(),spawn=0;
+const N=120;
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function compute(){Me=r>=rc?Mp(r):1;Fe=F(Me);pE=r>=rc?r:rc;prof=[];for(let i=0;i<=N;i++){prof.push(r>=0.999?0:Mx(i/N,Fe));}
+pbv.textContent=r.toFixed(3);me.textContent=Me.toFixed(2);pe.textContent=pE.toFixed(3);mf.textContent=Fe.toFixed(3);
+let t,bg,fg;
+if(r>=0.999){t='Case 1: no pressure difference, no flow';bg='--card';fg='--muted';}
+else if(r>rc+0.003){t='Case 2: subsonic exit, p_E = p_B. Lowering p_B still raises ṁ';bg='--acc-bg';fg='--acc-fg';}
+else if(r>=rc-0.003){t='Case 3: exit just sonic (M_E = 1). Maximum ṁ reached';bg='--warn-bg';fg='--warn-fg';}
+else{t='Case 4: choked. p_E stays at 0.528 p₀ > p_B, ṁ frozen';bg='--dang-bg';fg='--dang-fg';}
+reg.textContent=t;reg.style.background='var('+bg+')';reg.style.color='var('+fg+')';drawStatic();if(reduceMotion)drawNozzle();}
+const cs=()=>({t:cv('--text'),s:cv('--muted'),b:cv('--line'),blue:cv('--blue'),coral:cv('--coral'),flow:cv('--flow'),f:getComputedStyle(document.body).fontFamily});
+function setup(c){const d=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*d)){c.width=Math.round(w*d);c.height=Math.round(h*d);}const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);return[x,w,h];}
+const Mat=x=>{if(x>=1)return prof[N]||0;const i=Math.max(0,Math.min(N,Math.round(x*N)));return prof[i]||0;};
+function drawNozzle(){const[x,W,H]=setup(c1);const C=cs();x.font='12px '+C.f;
+const X=v=>12+(W-24)*v/1.3,cy=H/2,k=17;
+for(let i=0;i<N;i++){const v=i/N,h=k*A(v);x.globalAlpha=0.08+0.55*prof[i];x.fillStyle=C.flow;x.fillRect(X(v),cy-h,X(1/N)-X(0)+1,2*h);}
+x.globalAlpha=0.08+0.2*Math.min(1,Me);x.fillStyle=C.flow;x.fillRect(X(1),cy-56,X(1.3)-X(1),112);x.globalAlpha=1;
+x.strokeStyle=C.t;x.lineWidth=1.5;
+for(const s of[-1,1]){x.beginPath();for(let i=0;i<=N;i++){const v=i/N;i?x.lineTo(X(v),cy+s*k*A(v)):x.moveTo(X(v),cy+s*k*A(v));}x.lineTo(X(1),cy+s*56);x.lineTo(X(1.3),cy+s*56);x.stroke();}
+x.fillStyle=C.s;x.fillText('p₀, T₀',X(0.02),cy+4);x.fillText('p_B',X(1.15),cy-40);x.fillText('exit',X(1)-12,cy-k-6);
+x.strokeStyle=C.coral;x.lineWidth=2;for(const w of waves){const h=w.x>=1?40:k*A(w.x)*0.8;x.globalAlpha=Math.max(0,1-w.age/5);x.beginPath();x.arc(X(w.x)+h*0.6,cy,h,Math.PI*0.75,Math.PI*1.25);x.stroke();}x.globalAlpha=1;
+if(r<rc-0.003){x.fillStyle=C.coral;x.fillText('signals stuck at M = 1',X(0.45),H-6);}}
+function axes(x,W,H,C,xl,yl,x0,x1,y0,y1){const L=34,R=10,T=10,B=26;const px=v=>L+(W-L-R)*(v-x0)/(x1-x0),py=v=>H-B-(H-T-B)*(v-y0)/(y1-y0);x.strokeStyle=C.b;x.lineWidth=1;x.beginPath();x.moveTo(L,T);x.lineTo(L,H-B);x.lineTo(W-R,H-B);x.stroke();x.fillStyle=C.s;x.font='11px '+C.f;x.fillText(xl,W-R-x.measureText(xl).width,H-6);x.fillText(yl,L+4,T+8);return[px,py];}
+function dash(x,a,b,c,d){x.setLineDash([4,4]);x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.stroke();x.setLineDash([]);}
+function drawStatic(){const C=cs();
+{const[x,W,H]=setup(c2);const[px,py]=axes(x,W,H,C,'x','p/p₀',0,1.3,0,1.05);
+x.fillStyle=C.s;x.fillText('1',20,py(1)+4);x.fillText('0.528',2,py(rc)+4);x.fillText('0',24,py(0)+4);
+x.strokeStyle=C.b;dash(x,px(0),py(rc),px(1.3),py(rc));dash(x,px(1),py(0),px(1),py(1.05));
+x.strokeStyle=C.blue;x.lineWidth=2;x.beginPath();for(let i=0;i<=N;i++){const v=i/N,p=prM(prof[i]);i?x.lineTo(px(v),py(p)):x.moveTo(px(v),py(p));}x.stroke();
+x.strokeStyle=C.coral;x.beginPath();x.moveTo(px(1),py(r));x.lineTo(px(1.3),py(r));x.stroke();
+if(r<rc-0.003){x.lineWidth=1.5;dash(x,px(1.01),py(rc),px(1.01),py(r));x.fillStyle=C.coral;x.fillText('drop outside',px(1.03),py((rc+r)/2)+4);}
+x.fillStyle=C.blue;x.beginPath();x.arc(px(1),py(pE),4,0,7);x.fill();x.fillStyle=C.s;x.fillText('p_E',px(1)-26,py(pE)-6);}
+{const[x,W,H]=setup(c3);const[px,py]=axes(x,W,H,C,'p_B/p₀','ṁ fn',0,1,0,1.4);
+x.fillStyle=C.s;x.fillText('1.281',0,py(Fmax)+4);x.fillText('0.528',px(rc)-14,H-12);x.fillText('1',px(1)-8,H-12);
+x.strokeStyle=C.b;dash(x,px(rc),py(0),px(rc),py(Fmax));
+x.strokeStyle=C.blue;x.lineWidth=2;x.beginPath();for(let i=0;i<=200;i++){const v=i/200,f=v>=rc?F(Mp(v)):Fmax;i?x.lineTo(px(v),py(f)):x.moveTo(px(v),py(f));}x.stroke();
+x.fillStyle=C.coral;x.beginPath();x.arc(px(r),py(Fe),6,0,7);x.fill();
+x.fillStyle=C.s;x.fillText('choked',px(0.12),py(Fmax)-6);x.fillText('subsonic',px(0.66),py(F(Mp(0.8)))-10);}}
+function loop(t){const dt=Math.min(0.05,(t-last)/1000);last=t;spawn+=dt;
+if(spawn>0.6){spawn=0;waves.push({x:1.28,age:0});}
+for(const w of waves){w.age+=dt;const M=w.x>1?Math.min(0.3,Me*0.3):Mat(w.x);w.x-=Math.max(0,1-M)*0.32*dt;if(w.x<1&&w.x>0.995&&Me>=0.999)w.x=1;}
+waves=waves.filter(w=>w.x>0&&w.age<5);drawNozzle();requestAnimationFrame(loop);}
+pb.addEventListener('input',()=>{r=+pb.value;compute();});
+document.querySelectorAll('.pb button').forEach(b=>b.addEventListener('click',()=>{r=+b.dataset.v;pb.value=r;compute();}));
+addEventListener('resize',()=>{drawStatic();drawNozzle();});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{drawStatic();drawNozzle();});
+compute();if(!reduceMotion)requestAnimationFrame(loop);
+</script>
+</body>
+</html>
