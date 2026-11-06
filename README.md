@@ -17,6 +17,10 @@ Open `index.html` in any browser. No build step or dependencies.
 
 To host it with GitHub Pages: repo Settings → Pages → deploy from the `main` branch root.
 
+- `index.html`: convergent nozzle, back pressure and choking
+- `cd-nozzle-shocks.html`: C-D nozzle, cases A to H and shock movement
+- `supersonic-wind-tunnel.html`: tunnel starting and the second throat
+
 ## Model
 
 - Area distribution: A/A_E = 1 + 2(1 − x)², with the exit at x = 1 as the minimum area.
