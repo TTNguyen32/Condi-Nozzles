@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Supersonic wind tunnel: starting and the second throat</title>
+<style>
+:root{--surface-0:#f7f8fa;--surface-1:#eceff3;--text-primary:#14181f;--text-secondary:#5a6270;--border-strong:#c4cad3;--radius:8px;
+--font-sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+--bg-accent:#E6F1FB;--text-accent:#0C447C;--bg-warning:#FAEEDA;--text-warning:#633806;--bg-danger:#FCEBEB;--text-danger:#791F1F;--bg-success:#EAF3DE;--text-success:#27500A;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--surface-0:#12151a;--surface-1:#1d222a;--text-primary:#e8ebf0;--text-secondary:#9aa3b0;--border-strong:#3a414c;
+--bg-accent:#0C447C;--text-accent:#B5D4F4;--bg-warning:#633806;--text-warning:#FAC775;--bg-danger:#791F1F;--text-danger:#F7C1C1;--bg-success:#27500A;--text-success:#C0DD97;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--surface-0);color:var(--text-primary);font-family:var(--font-sans)}
+main{max-width:640px;margin:0 auto;padding:calc(1.5rem + env(safe-area-inset-top,0px)) 1rem calc(2rem + env(safe-area-inset-bottom,0px))}
+h1{font-size:1.4rem;font-weight:500;margin:0 0 .25rem}
+.lede{color:var(--text-secondary);margin:0 0 1.25rem;line-height:1.6}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+input[type=range]{accent-color:#185FA5}
+button{font:inherit;border-radius:8px;border:1px solid var(--border-strong);background:transparent;color:var(--text-primary);cursor:pointer}
+button:hover{background:var(--surface-1)}
+button:focus-visible,input:focus-visible{outline:2px solid #378ADD;outline-offset:2px}
+footer{font-size:12px;color:var(--text-secondary);border-top:1px solid var(--border-strong);padding-top:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+<h1>Supersonic wind tunnel: starting and the second throat</h1>
+<p class="lede">Start the tunnel and watch whether the diffuser can swallow the starting shock. Then close the second throat to cut losses, and see what makes the tunnel unstart.</p>
+<h2 class="sr-only">Interactive supersonic wind tunnel with a variable second throat, showing the starting shock moving through the test section and either being swallowed into the diffuser or getting stuck.</h2>
+<style>
+.mc{background:var(--surface-1);border-radius:var(--radius);padding:8px 12px}
+.ml{font-size:12px;color:var(--text-secondary);margin:0}
+.mv{font-size:18px;font-weight:500;margin:2px 0 0}
+.row{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.row label{font-size:14px;color:var(--text-secondary);white-space:nowrap;min-width:64px}
+.row span{font-size:14px;font-weight:500;min-width:44px;text-align:right}
+.bt{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.bt button{font-size:13px;padding:5px 11px}
+canvas{display:block;width:100%}
+.cap{font-size:12px;color:var(--text-secondary);margin:4px 0 14px}
+</style>
+<div class="row"><label for="pb">p<sub>B</sub>/p<sub>0</sub></label><input type="range" id="pb" min="0.05" max="1" step="0.001" value="1" style="flex:1"><span id="pbv">1.000</span></div>
+<div class="row"><label for="a2">A<sub>2</sub>/A<sub>1</sub></label><input type="range" id="a2" min="1" max="2" step="0.01" value="1.8" style="flex:1"><span id="a2v">1.80</span></div>
+<p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px" id="need"></p>
+<div class="bt">
+<button id="goBtn">Start tunnel</button>
+<button id="closeBtn">Close second throat</button>
+<button id="offBtn">Shut down</button>
+</div>
+<div id="reg" style="font-size:14px;padding:8px 12px;border-radius:var(--radius);margin:0 0 10px"></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 12px">
+<div class="mc"><p class="ml">Test section Mach</p><p class="mv" id="mts">0</p></div>
+<div class="mc"><p class="ml">Tunnel state</p><p class="mv" id="st">off</p></div>
+<div class="mc"><p class="ml">Shock strength M<sub>1</sub></p><p class="mv" id="m1">none</p></div>
+<div class="mc"><p class="ml">p<sub>0</sub> recovery (exit)</p><p class="mv" id="rec">1.000</p></div>
+</div>
+<canvas id="c1" style="height:150px"></canvas>
+<p class="cap">Shading shows local Mach number, red lines are normal shocks. Coral pulses are signals from the downstream fan travelling upstream at a − u.</p>
+<canvas id="c2" style="height:210px"></canvas>
+<p class="cap">Static pressure along the tunnel. Grey is the ideal isentropic run. Note the handout plots p/p₀ increasing downwards.</p>
+<footer>Try: (1) start with A₂/A₁ = 1.8, (2) shut down and start with A₂/A₁ ≈ 1.3, (3) start at 1.8, close the second throat, then raise p<sub>B</sub> until it unstarts. Model: quasi-1D inviscid flow, air γ = 1.4, test section area ratio 2 (M ≈ 2.2). Real diffusers need extra margin for boundary layer effects.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const g=1.4,Ae=2.6,XE=4.6,XB=5.0,x1t=0.8,xT0=1.6,xT1=2.8,x2t=3.5;
+const F=M=>g/Math.sqrt(g-1)*M*Math.pow(1+0.2*M*M,-3);const Fmax=F(1);
+const pr=M=>Math.pow(1+0.2*M*M,-3.5);
+const Mp=r=>r>=1?0:Math.sqrt(5*(Math.pow(r,-1/3.5)-1));
+function subM(a){if(a<=1)return 1;const t=Fmax/a;let lo=1e-6,hi=1;for(let i=0;i<40;i++){const m=(lo+hi)/2;F(m)<t?lo=m:hi=m;}return (lo+hi)/2;}
+function supM(a){if(a<=1)return 1;const t=Fmax/a;let lo=1,hi=8;for(let i=0;i<40;i++){const m=(lo+hi)/2;F(m)>t?lo=m:hi=m;}return (lo+hi)/2;}
+function subT(t){let lo=1e-6,hi=1;for(let i=0;i<40;i++){const m=(lo+hi)/2;F(m)<t?lo=m:hi=m;}return (lo+hi)/2;}
+const p0r=M=>M<=1?1:Math.pow(2.4*M*M/(0.4*M*M+2),3.5)*Math.pow(2.4/(2.8*M*M-0.4),2.5);
+let A2=1.8,r=1,started=false,PM=[],PP=[],shocks=[],P0f=1,state='off',M1s=0,waves=[],last=performance.now(),spawn=0,sweep=null;
+const bl=(a,b,t)=>a+(b-a)*(1-Math.cos(Math.PI*t))/2;
+function A(x){if(x<x1t)return bl(3,1,x/x1t);if(x<xT0)return bl(1,2,(x-x1t)/(xT0-x1t));if(x<xT1)return 2;if(x<x2t)return bl(2,A2,(x-xT1)/(x2t-xT1));return bl(A2,Ae,Math.min(1,(x-x2t)/(XE-x2t)));}
+const N=300,xs_=i=>XE*i/N;
+const qTS=p0r(supM(2)),Aneed=1/qTS,pC=pr(subM(Ae));
+function bis(f,lo,hi,tgt){for(let i=0;i<45;i++){const m=(lo+hi)/2;f(m)>tgt?lo=m:hi=m;}return (lo+hi)/2;}
+const pe1=xs=>{const q=p0r(supM(A(xs)));return q*pr(subM(Ae*q));};
+function diff(Ast,P0,i0){const fS=xs=>{const q=p0r(supM(A(xs)/Ast));return P0*q*pr(subM(Ae*q/Ast));};
+const peS=fS(x2t+1e-4),peX=fS(XE);
+if(r>=peS){for(let i=i0;i<=N;i++){const M=subM(A(xs_(i))/Ast);PM[i]=M;PP[i]=P0*pr(M);}P0f=P0;return'sub';}
+if(r>=peX){const xs=bis(fS,x2t+1e-4,XE,r),q=p0r(supM(A(xs)/Ast));M1s=supM(A(xs)/Ast);shocks.push(xs);
+for(let i=i0;i<=N;i++){const x=xs_(i);let M,P;if(x<xs){M=supM(A(x)/Ast);P=P0*pr(M);}else{M=subM(A(x)*q/Ast);P=P0*q*pr(M);}PM[i]=M;PP[i]=P;}P0f=P0*q;return'shock';}
+for(let i=i0;i<=N;i++){const M=supM(A(xs_(i))/Ast);PM[i]=M;PP[i]=P0*pr(M);}P0f=P0;M1s=0;return'sup';}
+const i2=Math.round(x2t/XE*N);
+function compute(){shocks=[];M1s=0;PM=new Array(N+1);PP=new Array(N+1);
+if(started){const ms=supM(A2),q=p0r(ms),peS=q*pr(subM(Ae*q));if(r>peS)started=false;else{for(let i=0;i<i2;i++){const x=xs_(i),M=x<=x1t?subM(A(x)):supM(A(x));PM[i]=M;PP[i]=pr(M);}const d=diff(1,1,i2);state=d==='sup'?'pushed':'started';}}
+if(!started){if(r>pC){state=r>=0.999?'off':'subsonic';const Me=Mp(r),Fe=F(Me);for(let i=0;i<=N;i++){const M=r>=0.999?0:subT(Fe*Ae/A(xs_(i)));PM[i]=M;PP[i]=r>=0.999?1:pr(M);}P0f=1;}
+else{const reach=qTS>=1/A2;const xsMax=reach?xT0:bis(x=>p0r(supM(A(x))),x1t+1e-4,xT0,1/A2);
+if(reach&&r<pe1(xT0)){started=true;return compute();}
+const peL=pe1(xsMax);
+if(r>=peL){const xs=bis(pe1,x1t+1e-4,xsMax,r),q=p0r(supM(A(xs)));M1s=supM(A(xs));shocks.push(xs);
+for(let i=0;i<=N;i++){const x=xs_(i);let M,P;if(x<=x1t){M=subM(A(x));P=pr(M);}else if(x<xs){M=supM(A(x));P=pr(M);}else{M=subM(A(x)*q);P=q*pr(M);}PM[i]=M;PP[i]=P;}P0f=q;state='starting';}
+else{const q=1/A2,M1=supM(A(xsMax));shocks.push(xsMax);
+for(let i=0;i<i2;i++){const x=xs_(i);let M,P;if(x<=x1t){M=subM(A(x));P=pr(M);}else if(x<xsMax){M=supM(A(x));P=pr(M);}else{M=subM(A(x)*q);P=q*pr(M);}PM[i]=M;PP[i]=P;}
+diff(A2,q,i2);M1s=M1;state='stuck';}}}
+render();}
+const Mat=x=>{const i=Math.max(0,Math.min(N,Math.floor(x/XE*N)));return PM[i]||0;};
+function render(){$('pbv').textContent=r.toFixed(3);$('a2v').textContent=A2.toFixed(2);
+$('need').textContent='Second throat needed to start this tunnel: A₂/A₁ ≥ '+Aneed.toFixed(2)+(A2<Aneed?' (currently too small)':'');
+const S={off:['Tunnel off: no pressure difference','--surface-1','--text-secondary','off'],subsonic:['Fan running, but the first throat is not choked yet. Flow subsonic everywhere','--bg-accent','--text-accent','subsonic'],starting:['Starting: a normal shock is travelling down the nozzle. Test section still subsonic','--bg-warning','--text-warning','starting'],stuck:['Unstarted: the second throat chokes on the low-p₀ air behind the shock, so the shock can’t get through. Open the second throat','--bg-danger','--text-danger','unstarted'],started:['Started: shock swallowed and parked in the diffuser. Test section supersonic. Now try closing the second throat','--bg-success','--text-success','started'],pushed:['Started, shock blown out of the diffuser. Running, but wasting fan power','--bg-success','--text-success','started']}[state];
+const reg=$('reg');reg.textContent=S[0];reg.style.background='var('+S[1]+')';reg.style.color='var('+S[2]+')';$('st').textContent=S[3];
+$('mts').textContent=Mat(2.2).toFixed(2);$('m1').textContent=shocks.length?M1s.toFixed(2):'none';$('rec').textContent=P0f.toFixed(3);drawP();}
+const C_=()=>{const s=getComputedStyle(document.documentElement);return{t:s.getPropertyValue('--text-primary').trim(),s:s.getPropertyValue('--text-secondary').trim(),b:s.getPropertyValue('--border-strong').trim(),f:getComputedStyle(document.body).fontFamily};};
+function setup(c){const d=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;if(c.width!==Math.round(w*d)){c.width=Math.round(w*d);c.height=Math.round(h*d);}const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);return[x,w,h];}
+function drawT(){const[x,W,H]=setup($('c1'));const C=C_();x.font='11px '+C.f;const X=v=>8+(W-16)*v/XB,cy=H/2+6,k=17;
+for(let i=0;i<N;i++){const v=xs_(i),h=k*A(v);x.globalAlpha=0.06+0.28*Math.min(PM[i],2.5);x.fillStyle='#378ADD';x.fillRect(X(v),cy-h,X(XE/N)-X(0)+1,2*h);}x.globalAlpha=1;
+x.strokeStyle=C.t;x.lineWidth=1.5;for(const s of[-1,1]){x.beginPath();for(let i=0;i<=N;i++){const v=xs_(i);i?x.lineTo(X(v),cy+s*k*A(v)):x.moveTo(X(v),cy+s*k*A(v));}x.lineTo(X(XE),cy+s*58);x.lineTo(X(XB),cy+s*58);x.stroke();}
+x.fillStyle=C.s;x.fillText('nozzle',X(0.55),12);x.fillText('test section',X(1.85),12);x.fillText('diffuser',X(3.3),12);x.fillText('fan',X(4.68),cy+4);
+x.strokeStyle='#E24B4A';x.lineWidth=3;for(const s of shocks){const h=k*A(s);x.beginPath();x.moveTo(X(s),cy-h);x.lineTo(X(s),cy+h);x.stroke();}
+x.strokeStyle='#D85A30';x.lineWidth=2;for(const w of waves){const h=w.x>=XE?44:k*A(w.x)*0.8;x.globalAlpha=Math.max(0,1-w.age/5);x.beginPath();x.arc(X(w.x)+h*0.6,cy,h,Math.PI*0.75,Math.PI*1.25);x.stroke();}x.globalAlpha=1;}
+function dash(x,a,b,c,d){x.setLineDash([4,4]);x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.stroke();x.setLineDash([]);}
+function drawP(){const[x,W,H]=setup($('c2'));const C=C_();x.font='11px '+C.f;const L=30,R=8,T=10,B=22;const px=v=>L+(W-L-R)*v/XB,py=v=>H-B-(H-T-B)*v/1.05;
+x.strokeStyle=C.b;x.lineWidth=1;x.beginPath();x.moveTo(L,T);x.lineTo(L,H-B);x.lineTo(W-R,H-B);x.stroke();
+x.fillStyle=C.s;x.fillText('p/p₀',L+4,T+8);x.fillText('1',18,py(1)+4);x.fillText('0',18,py(0)+4);
+for(const[v,l]of[[x1t,'1st throat'],[x2t,'2nd throat']]){dash(x,px(v),py(0),px(v),py(1.05));x.fillText(l,px(v)-24,H-6);}
+x.fillText('p*',14,py(0.528)+4);dash(x,px(0),py(0.528),px(XE),py(0.528));
+x.strokeStyle=C.b;x.lineWidth=1.3;x.beginPath();for(let i=0;i<=N;i++){const v=xs_(i),a=A(v);const p=v<=x1t?pr(subM(a)):v<x2t?pr(supM(a)):pr(subM(a));i?x.lineTo(px(v),py(p)):x.moveTo(px(v),py(p));}x.stroke();
+x.strokeStyle='#378ADD';x.lineWidth=2.2;x.beginPath();for(let i=0;i<=N;i++){const v=xs_(i);i?x.lineTo(px(v),py(PP[i])):x.moveTo(px(v),py(PP[i]));}x.stroke();
+x.strokeStyle='#D85A30';x.lineWidth=2;x.beginPath();x.moveTo(px(XE),py(r));x.lineTo(px(XB),py(r));x.stroke();}
+function loop(t){const dt=Math.min(0.05,(t-last)/1000);last=t;
+if(sweep){const sp=sweep.k==='pb'?0.1:0.25;let v=sweep.k==='pb'?r:A2;v+=Math.sign(sweep.to-v)*Math.min(Math.abs(sweep.to-v),sp*dt);if(sweep.k==='pb'){r=v;$('pb').value=v;}else{A2=v;$('a2').value=v;}compute();if(Math.abs(v-sweep.to)<1e-4)sweep=null;}
+spawn+=dt;if(r<0.999&&spawn>0.5){spawn=0;waves.push({x:XB-0.05,age:0});}
+const supEx=PM[N]>=1;for(const w of waves){w.age+=dt;if(w.x>XE){w.x-=0.5*dt;if(w.x<=XE&&supEx)w.x=XE;}else if(!(supEx&&w.x>=XE-1e-6)){const M=Mat(w.x);if(M<1)w.x-=(1-M)*0.5*dt;}}
+waves=waves.filter(w=>w.x>0&&w.age<5);drawT();requestAnimationFrame(loop);}
+$('pb').addEventListener('input',()=>{sweep=null;r=+$('pb').value;compute();});
+$('a2').addEventListener('input',()=>{sweep=null;A2=+$('a2').value;compute();});
+$('goBtn').addEventListener('click',()=>{r=1;started=false;$('pb').value=1;compute();sweep={k:'pb',to:0.35};});
+$('closeBtn').addEventListener('click',()=>{sweep={k:'a2',to:1.05};});
+$('offBtn').addEventListener('click',()=>{sweep=null;r=1;$('pb').value=1;started=false;compute();});
+addEventListener('resize',drawP);matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawP);
+compute();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
